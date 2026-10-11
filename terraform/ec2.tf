@@ -32,6 +32,7 @@ resource "aws_instance" "cloudlaunch" {
   subnet_id              = sort(data.aws_subnets.default.ids)[0]
   vpc_security_group_ids = [aws_security_group.cloudlaunch.id]
   iam_instance_profile   = aws_iam_instance_profile.cloudlaunch_ec2.name
+  user_data              = file("${path.module}/user-data.sh")
 
   metadata_options {
     http_tokens = "required"
