@@ -9,5 +9,6 @@ coverage/
 *.tfstate
 *.tfstate.*
 *.tfvars
+*.tfvars.json
 !.tfvars.example
-
+crash.log
