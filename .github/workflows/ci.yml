@@ -62,3 +62,33 @@ jobs:
 
       - name: Validate Terraform configuration
         run: terraform validate -no-color
+
+  deployment-safety-tests:
+    name: Deployment Safety and Recovery Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Validate Bash script syntax
+        run: |
+          bash -n scripts/promote-container.sh
+          bash -n scripts/rollback-container.sh
+          bash -n scripts/deploy.sh
+          bash -n tests/*.sh
+
+      - name: Run deployment safety tests
+        run: |
+          env -u PROMOTION_ENABLED -u ROLLBACK_ENABLED \
+            bash tests/test-promotion.sh
+
+      - name: Run successful promotion mock test
+        run: |
+          env -u PROMOTION_ENABLED -u ROLLBACK_ENABLED \
+            bash tests/test-promotion-mock.sh
+
+      - name: Run failed promotion recovery mock test
+        run: |
+          env -u PROMOTION_ENABLED -u ROLLBACK_ENABLED \
+            bash tests/test-promotion-failure.sh
