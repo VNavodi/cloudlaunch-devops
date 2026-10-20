@@ -7,8 +7,15 @@ if [[ "${ROLLBACK_ENABLED:-false}" != true ]]; then
   exit 0
 fi
 
+# Defaults preserve existing production behavior.
+APP_NAME="${APP_NAME:-cloudlaunch-app}"
+PREVIOUS_NAME="${PREVIOUS_NAME:-cloudlaunch-app-previous}"
+FAILED_NAME="${FAILED_NAME:-cloudlaunch-app-failed}"
+HEALTH_PORT="${HEALTH_PORT:-3000}"
+LOCK_FILE="${LOCK_FILE:-/var/lock/cloudlaunch-deploy.lock}"
+
 # Share the same lock as the deployment SSM command.
-exec 9>/var/lock/cloudlaunch-deploy.lock
+exec 9>"$LOCK_FILE"
 flock -n 9 || {
   echo 'ERROR: Another CloudLaunch operation is in progress.' >&2
   exit 1
@@ -24,39 +31,40 @@ status() {
 
 health() {
   curl --max-time 3 -fsS \
-    http://127.0.0.1:3000/health >/dev/null 2>&1
+    http://127.0.0.1:${HEALTH_PORT}/health >/dev/null 2>&1
 }
 
 # Preflight: do not modify production until all checks pass.
-exists cloudlaunch-app-previous || {
+exists "${PREVIOUS_NAME}" || {
   echo 'ERROR: Rollback backup does not exist.' >&2
   exit 1
 }
 
-exists cloudlaunch-app || {
+exists "${APP_NAME}" || {
   echo 'ERROR: Current production container does not exist.' >&2
   exit 1
 }
 
-if exists cloudlaunch-app-failed; then
+if exists "${FAILED_NAME}"; then
   echo 'ERROR: Diagnostic container already exists.' >&2
   exit 1
 fi
 
-PORT=$(docker inspect cloudlaunch-app-previous \
+PORT=$(docker inspect "${PREVIOUS_NAME}" \
   --format '{{(index (index .HostConfig.PortBindings "3000/tcp") 0).HostIp}}:{{(index (index .HostConfig.PortBindings "3000/tcp") 0).HostPort}}')
 
-[[ "$PORT" == "127.0.0.1:3000" ]] || {
+[[ "$PORT" == "127.0.0.1:${HEALTH_PORT}" ]] || {
   echo 'ERROR: Backup port binding is invalid.' >&2
   exit 1
 }
 
-[[ "$(status cloudlaunch-app-previous)" == exited ]] || {
+[[ "$(status "${PREVIOUS_NAME}")" == exited ||
+   "$(status "${PREVIOUS_NAME}")" == created ]] || {
   echo 'ERROR: Backup must be stopped.' >&2
   exit 1
 }
 
-[[ "$(status cloudlaunch-app)" == running ]] || {
+[[ "$(status "${APP_NAME}")" == running ]] || {
   echo 'ERROR: Production must be running.' >&2
   exit 1
 }
@@ -85,41 +93,41 @@ recover() {
   echo 'WARNING: Rollback incomplete. Attempting recovery.' >&2
 
   # Original production has already been renamed.
-  if exists cloudlaunch-app-failed; then
+  if exists "${FAILED_NAME}"; then
 
     # The backup may now occupy the production name.
-    if exists cloudlaunch-app; then
-      if [[ "$(status cloudlaunch-app)" == running ]] && health; then
+    if exists "${APP_NAME}"; then
+      if [[ "$(status "${APP_NAME}")" == running ]] && health; then
         echo 'WARNING: Current production is healthy; preserving it.' >&2
         echo 'Manual inspection required before further changes.' >&2
         return 1
       fi
 
-      if exists cloudlaunch-app-previous; then
+      if exists "${PREVIOUS_NAME}"; then
         echo 'CRITICAL: Both production and backup names exist.' >&2
         echo 'Manual inspection required; no names overwritten.' >&2
         return 1
       fi
 
-      docker update --restart=no cloudlaunch-app || true
-      docker stop cloudlaunch-app || true
+      docker update --restart=no "${APP_NAME}" || true
+      docker stop "${APP_NAME}" || true
 
-      if ! docker rename cloudlaunch-app cloudlaunch-app-previous; then
+      if ! docker rename "${APP_NAME}" "${PREVIOUS_NAME}"; then
         echo 'CRITICAL: Cannot preserve restored backup.' >&2
         return 1
       fi
     fi
 
-    if ! docker rename cloudlaunch-app-failed cloudlaunch-app; then
+    if ! docker rename "${FAILED_NAME}" "${APP_NAME}"; then
       echo 'CRITICAL: Cannot restore original container name.' >&2
       return 1
     fi
   fi
 
   # Original production may still have its original name.
-  if exists cloudlaunch-app; then
-    docker update --restart=unless-stopped cloudlaunch-app || true
-    docker start cloudlaunch-app || true
+  if exists "${APP_NAME}"; then
+    docker update --restart=unless-stopped "${APP_NAME}" || true
+    docker start "${APP_NAME}" || true
 
     for _ in $(seq 1 10); do
       if health; then
@@ -140,20 +148,20 @@ trap recover EXIT
 echo 'Stopping current production for rollback...'
 RECOVERY_ACTIVE=true
 
-docker update --restart=no cloudlaunch-app
-docker stop cloudlaunch-app
-docker rename cloudlaunch-app cloudlaunch-app-failed
+docker update --restart=no "${APP_NAME}"
+docker stop "${APP_NAME}"
+docker rename "${APP_NAME}" "${FAILED_NAME}"
 
-docker rename cloudlaunch-app-previous cloudlaunch-app
-docker update --restart=unless-stopped cloudlaunch-app
-docker start cloudlaunch-app
+docker rename "${PREVIOUS_NAME}" "${APP_NAME}"
+docker update --restart=unless-stopped "${APP_NAME}"
+docker start "${APP_NAME}"
 
 for _ in $(seq 1 15); do
   if health; then
     ROLLBACK_COMPLETE=true
     RECOVERY_ACTIVE=false
     echo 'Rollback successful.'
-    echo 'Previous deployment retained as cloudlaunch-app-failed.'
+    echo "Previous deployment retained as ${FAILED_NAME}."
     exit 0
   fi
   sleep 2
