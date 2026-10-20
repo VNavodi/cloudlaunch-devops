@@ -31,7 +31,7 @@ Jenkins: **Build with Parameters**, specify an existing ECR `IMAGE_TAG`, and onl
 
 ## Rollback / recovery
 
-A successful promotion **retains** `cloudlaunch-app-previous` to support rollback. This intentionally blocks subsequent promotions until the operator explicitly reviews and resolves that backup; do not delete it automatically. The manual rollback script is meant to run **on EC2** only, with `ROLLBACK_ENABLED=true`; do not run it on the laptop. It retains the replaced container as `cloudlaunch-app-failed`. If recovery fails, inspect container state and logs manually before further changes.
+A successful promotion **retains** `cloudlaunch-app-previous` to support rollback. This intentionally blocks subsequent promotions until the operator explicitly reviews and resolves that backup; do not delete it automatically. The manual rollback script is meant to run **on EC2** only, with `ROLLBACK_ENABLED=true`; do not run it on the laptop with production defaults. Isolated local Docker testing is supported using explicit APP_NAME, PREVIOUS_NAME, FAILED_NAME, HEALTH_PORT, and LOCK_FILE overrides. It retains the replaced container as `cloudlaunch-app-failed`. If recovery fails, inspect container state and logs manually before further changes.
 
 The automatic recovery trap is best-effort: it cannot protect against EC2 power loss, forced kill, or every Docker daemon failure. SSM command timeouts can leave the remote command still running; check the command ID and EC2 state before retrying. Do not start concurrent deployments. A failed promotion may cause temporary downtime.
 
@@ -41,3 +41,42 @@ The automatic recovery trap is best-effort: it cannot protect against EC2 power 
 - Automated build/push of new immutable image tags to ECR
 - Live EC2 end-to-end promotion/rollback verification
 - Monitoring, notifications, and full DevSecOps security gates
+
+## Jenkins rollback pipeline
+
+Jenkins job: `CloudLaunch-Rollback-Pipeline`
+
+- Pipeline definition: Pipeline script from SCM
+- Repository: https://github.com/VNavodi/cloudlaunch-devops.git
+- Branch: `*/main`
+- Script path: `Jenkinsfile.rollback`
+- Parameter: `ROLLBACK_TO_PREVIOUS` (default: false)
+
+The default build is a dry-run. It validates rollback scripts without
+sending AWS commands or modifying production.
+
+Setting `ROLLBACK_TO_PREVIOUS=true` explicitly authorizes a real
+rollback through AWS Systems Manager. This must only be done after
+reviewing the current EC2 state and backup container.
+
+## Verified local rollback tests
+
+The following tests were completed using isolated Docker containers:
+
+| Test | Result |
+|---|---|
+| Successful rollback from v2 to v1 | Passed |
+| Restored v1 health check | Passed |
+| Unhealthy backup rollback failure | Passed |
+| Automatic recovery of original healthy v2 | Passed |
+| Failed rollback exit code equals 1 | Passed |
+| Jenkins rollback dry-run on commit fd79ca4 | Passed |
+
+Local tests used configurable container names, host ports and lock files.
+The default production settings remain unchanged.
+
+These results validate the tested local scenarios only. Real AWS EC2
+rollback, unexpected Docker failures, and all recovery edge cases
+have not been fully verified.
+
+Do not run production rollback without explicit authorization.
