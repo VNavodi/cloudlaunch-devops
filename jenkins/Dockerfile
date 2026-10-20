@@ -4,7 +4,7 @@ USER root
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-      curl unzip ca-certificates && \
+      curl unzip ca-certificates python3 util-linux && \
     rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \
