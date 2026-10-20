@@ -1,0 +1,56 @@
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        timeout(time: 20, unit: 'MINUTES')
+    }
+
+    parameters {
+        booleanParam(
+            name: 'ROLLBACK_TO_PREVIOUS',
+            defaultValue: false,
+            description: 'Explicitly authorize rollback to the previous production container'
+        )
+    }
+
+    environment {
+        AWS_DEFAULT_REGION = 'ap-southeast-2'
+        AWS_CONFIG_FILE = '/var/jenkins_home/.aws/config'
+    }
+
+    stages {
+        stage('Validate rollback scripts') {
+            steps {
+                sh 'bash -n scripts/rollback.sh scripts/rollback-container.sh'
+            }
+        }
+
+        stage('AWS identity') {
+            when {
+                expression { return params.ROLLBACK_TO_PREVIOUS }
+            }
+            steps {
+                sh 'aws sts get-caller-identity --query Account --output text | grep -Fx 636621822646'
+            }
+        }
+
+        stage('Rollback via SSM') {
+            steps {
+                withEnv(["ROLLBACK_ENABLED=${params.ROLLBACK_TO_PREVIOUS ? 'true' : 'false'}"]) {
+                    sh 'bash scripts/rollback.sh'
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'CloudLaunch rollback pipeline completed.'
+        }
+        failure {
+            echo 'CloudLaunch rollback failed. Inspect SSM output and EC2 container state.'
+        }
+    }
+}
