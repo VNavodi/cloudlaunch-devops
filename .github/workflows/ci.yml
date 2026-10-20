@@ -44,7 +44,7 @@ jobs:
           format: 'table'
           severity: 'HIGH,CRITICAL'
           vuln-type: 'os,library'
-          exit-code: '0'
+          exit-code: '1'
 
   terraform-validate:
     name: Validate Terraform Infrastructure
