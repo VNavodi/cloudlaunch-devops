@@ -1,12 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${ROLLBACK_ENABLED:-false}" != "true" ]]; then
+  echo "DRY RUN: Production rollback is disabled."
+  echo "No containers were changed."
+  exit 0
+fi
+
 echo "Checking for previous CloudLaunch container..."
 
 if ! docker container inspect cloudlaunch-app-previous >/dev/null 2>&1; then
   echo "ERROR: No previous container found."
   exit 1
 fi
+echo "Validating rollback backup..."
+
+BACKUP_IMAGE=$(docker inspect cloudlaunch-app-previous \
+  --format '{{.Image}}')
+
+BACKUP_RESTART=$(docker inspect cloudlaunch-app-previous \
+  --format '{{.HostConfig.RestartPolicy.Name}}')
+
+BACKUP_PORT=$(docker inspect cloudlaunch-app-previous \
+  --format '{{(index (index .HostConfig.PortBindings "3000/tcp") 0).HostIp}}:{{(index (index .HostConfig.PortBindings "3000/tcp") 0).HostPort}}')
+
+if [[ -z "$BACKUP_IMAGE" ||
+      "$BACKUP_RESTART" != "unless-stopped" ||
+      "$BACKUP_PORT" != "127.0.0.1:3000" ]]; then
+  echo "ERROR: Invalid rollback backup configuration."
+  exit 1
+fi
+
+echo "Rollback backup configuration verified."
 
 echo "Stopping failed deployment if present..."
 

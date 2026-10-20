@@ -45,4 +45,23 @@ curl -fsS http://127.0.0.1:3000/health
 echo
 echo "Promotion prerequisites passed."
 echo "Target image: $IMAGE"
+
+echo "Checking rollback preparation..."
+
+CURRENT_CONTAINER_ID=$(docker inspect cloudlaunch-app \
+  --format '{{.Id}}')
+
+CURRENT_IMAGE_ID=$(docker inspect cloudlaunch-app \
+  --format '{{.Image}}')
+
+if [[ -z "$CURRENT_CONTAINER_ID" || -z "$CURRENT_IMAGE_ID" ]]; then
+  echo "ERROR: Could not identify current production container."
+  exit 1
+fi
+
+echo "Production container identified."
+echo "Current image ID: $CURRENT_IMAGE_ID"
+echo "Rollback preparation checks passed."
+
+
 echo "PREPARATION ONLY: No production changes made."
