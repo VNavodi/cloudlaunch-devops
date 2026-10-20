@@ -81,7 +81,7 @@ PROMOTE_FILE=\$(mktemp)
 printf '%s' "\$PROMOTE_B64" | base64 -d > "\$PROMOTE_FILE"
 chmod 700 "\$PROMOTE_FILE"
 # Keep temp promotion script until it completes; exit trap handles cleanup.
-PROMOTION_ENABLED=true bash "\$PROMOTE_FILE"
+PROMOTION_ENABLED=true bash "\$PROMOTE_FILE" "\$IMAGE"
 rm -f "\$PROMOTE_FILE"
 echo 'EC2 deployment completed.'
 REMOTE
