@@ -12,3 +12,6 @@ coverage/
 *.tfvars.json
 !.tfvars.example
 crash.log
+
+# Local deployment backups
+scripts/*.backup
