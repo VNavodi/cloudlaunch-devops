@@ -1,32 +1,14 @@
-
+# Reference the existing AWS VPC
 data "aws_vpc" "default" {
-  default = true
+  id = "vpc-0e0f77772204fa83a"
 }
 
-resource "aws_security_group" "cloudlaunch" {
-  name_prefix = "${var.project_name}-api-"
-  description = "Security group for CloudLaunch API"
-  vpc_id      = data.aws_vpc.default.id
+# Reference the existing EC2 subnet
+data "aws_subnet" "cloudlaunch" {
+  id = "subnet-0d9c5117cbc3fcfed"
+}
 
-  ingress {
-    description = "Allow CloudLaunch API traffic"
-    from_port   = 3000
-    to_port     = 3000
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    description = "Allow outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name      = "${var.project_name}-api-sg"
-    Project   = "CloudLaunch"
-    ManagedBy = "Terraform"
-  }
+# Reference the existing security group
+data "aws_security_group" "cloudlaunch" {
+  id = "sg-06f33ab5e91c2ad79"
 }

@@ -80,3 +80,91 @@ rollback, unexpected Docker failures, and all recovery edge cases
 have not been fully verified.
 
 Do not run production rollback without explicit authorization.
+
+## Terraform integration of existing AWS infrastructure
+
+The `terraform/` configuration is currently a read-only inventory of the
+existing CloudLaunch infrastructure. It uses data sources for the existing
+VPC, subnet, security group, ECR repository, EC2 instance, IAM role, and IAM
+instance profile. It does not declare resources for those objects, so it will
+not provision a replacement EC2 instance, create another ECR repository, or
+create duplicate IAM resources.
+
+The separate `terraform-ecr/` directory still contains an
+`aws_ecr_repository` resource. Its Terraform state is not present and its
+ownership is not assumed. Do not run `terraform apply` or `terraform destroy`
+there unless ownership, state, and the desired management boundary have first
+been confirmed. This integration does not import resources into state.
+
+The data-source approach verifies that the supplied IDs and names exist and
+exposes read-only outputs. It does not manage drift, update tags or policies,
+change EC2 power state, or guarantee that the existing IAM permissions,
+security-group rules, and instance configuration meet the intended security
+posture. The EC2 instance is expected to remain stopped during this work.
+
+From `terraform/`, the safe checks are:
+
+```bash
+terraform fmt -check
+terraform validate
+terraform plan -input=false
+```
+
+The plan only reads data sources when credentials and AWS connectivity are
+available. Never run `terraform apply`, `terraform destroy`, or `terraform
+import` for this read-only integration without a separately approved change.
+
+
+
+## 🔐 DevSecOps Security
+
+CloudLaunch integrates automated container vulnerability scanning into its GitHub Actions CI pipeline to help detect security risks before deployment.
+
+### Security Controls Implemented
+
+- **Multi-stage Docker build:** Separates dependency installation from the production runtime.
+- **Reduced attack surface:** Removes unnecessary npm tooling from the production Docker image.
+- **Non-root container:** Runs the Node.js application using the `node` user.
+- **Automated vulnerability scanning:** Uses Trivy to scan Docker images for operating system and application dependency vulnerabilities.
+- **Enforced security gate:** GitHub Actions fails the Docker image scanning step when Trivy detects HIGH or CRITICAL vulnerabilities.
+- **Production runtime verification:** The hardened Docker image was tested locally to confirm the application still runs correctly.
+
+### Vulnerability Remediation Results
+
+| Security metric | Before | After |
+|---|---|---|
+| HIGH vulnerabilities | 4 | 0 |
+| CRITICAL vulnerabilities | 0 | 0 |
+| Docker runtime | npm tooling included | Unnecessary npm tooling removed |
+| CI vulnerability scanning | Report-only | Enforced security gate |
+
+**Verification:** GitHub Actions CI Pipeline #21 passed with the enforced Trivy security gate enabled.
+
+### Security Tools
+
+- Docker — Container image building and runtime isolation
+- Trivy — Container vulnerability scanning
+- GitHub Actions — Automated CI security checks
+
+### Security Gate Configuration
+
+The CI pipeline uses the following Trivy configuration:
+
+```yaml
+- name: Scan Docker image with Trivy
+  uses: aquasecurity/trivy-action@v0.36.0
+  with:
+    image-ref: 'cloudlaunch:ci'
+    format: 'table'
+    severity: 'HIGH,CRITICAL'
+    vuln-type: 'os,library'
+    exit-code: '1'
+```
+
+The pipeline rejects images when the configured Trivy scan detects HIGH or CRITICAL vulnerabilities. A passing scan does not guarantee that the image is free of all security risks.
+
+**Verified commits:**
+- `4167a61` — Harden Docker runtime with multi-stage build
+- `5c119a7` — Enforce Trivy vulnerability gate in CI
+
+[View successful GitHub Actions workflow](https://github.com/VNavodi/cloudlaunch-devops/actions)
