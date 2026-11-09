@@ -17,15 +17,10 @@ for cmd in aws python3 base64; do
   }
 done
 
-IDENTITY=$(aws sts get-caller-identity \
-  --query Account --output text)
-
-[[ "$IDENTITY" == "$ACCOUNT" ]] || {
-  echo 'ERROR: Unexpected AWS account.' >&2
-  exit 1
-}
-
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source "$SCRIPT_DIR/aws-identity.sh"
+cloudlaunch_identity
+aws() { command aws --profile "$AWS_PROFILE" "$@"; }
 ROLLBACK_B64=$(base64 -w0 "$SCRIPT_DIR/rollback-container.sh")
 
 REMOTE_SCRIPT=$(cat <<REMOTE
@@ -46,8 +41,9 @@ ROLLBACK_ENABLED=true bash "\$ROLLBACK_FILE"
 REMOTE
 )
 
-PARAMETERS=$(printf '%s' "$REMOTE_SCRIPT" |
-  python3 -c 'import json,sys; print(json.dumps({"commands":[sys.stdin.read()]}))')
+REMOTE_B64=$(printf '%s' "$REMOTE_SCRIPT" | base64 -w0)
+PARAMETERS=$(printf '%s' "$REMOTE_B64" |
+  python3 -c 'import json,sys; print(json.dumps({"executionTimeout":["600"],"commands":["printf %s " + sys.stdin.read() + " | base64 -d | bash"]}))')
 
 COMMAND_ID=$(aws ssm send-command \
   --instance-ids "$INSTANCE_ID" \

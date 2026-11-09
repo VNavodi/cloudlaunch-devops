@@ -11,20 +11,20 @@
 
 1. EC2 must be running and SSM Online; AWS CLI and Docker must be installed on EC2. EC2 instance role needs ECR read permissions, and SSM Agent needs its managed permissions. The production container must be healthy and listening only on `127.0.0.1:3000`.
 2. The operator or Jenkins execution environment needs AWS CLI with short-lived, authorized credentials to call `ecr:DescribeImages`, `ssm:SendCommand`, `ssm:GetCommandInvocation`, and `sts:GetCallerIdentity` (Jenkins). **Do not copy a personal AWS CLI session or admin keys into the Jenkins image or Git.** Prefer an approved short-lived identity/credential broker for Jenkins. The repository does not provision that identity.
-3. The Jenkins agent requires Bash, Python 3, AWS CLI and `base64`. Rebuild the custom Jenkins image to include Python 3. The Jenkins pipeline only deploys images that are already present in ECR; image build/push automation is **not** included.
+3. The Jenkins agent requires Bash, Python 3, AWS CLI and `base64`. Rebuild the custom Jenkins image to include Python 3. The Jenkins pipeline only deploys images already present in ECR. A separately gated GitHub publisher now reuses the CI-scanned image artifact; live publishing remains unverified.
 4. Review `INSTANCE_ID`, AWS account and region in scripts before use. Both deploy and rollback are disruptive operations, not zero-downtime deployments.
 
 ## Safe commands
 
 ```bash
-# Local no-change preview; no AWS credentials needed until the image is resolved:
+# Local no-change preview; invalid image is deliberately rejected:
 ./scripts/promote-container.sh invalid-image
 
-# Resolve image in ECR, but make NO EC2 changes:
+# Validate tag and scripts locally; NO AWS calls or container changes:
 ./scripts/deploy.sh v1
 
 # Only after approved AWS credentials, a new immutable image, and maintenance window:
-DEPLOY_ENABLED=true ./scripts/deploy.sh v2
+AWS_PROFILE=cloudlaunch DEPLOY_ENABLED=true ./scripts/deploy.sh v2
 ```
 
 Jenkins: **Build with Parameters**, specify an existing ECR `IMAGE_TAG`, and only select `DEPLOY_TO_EC2` when intentionally authorizing production changes. The default false setting performs no EC2 modification.
@@ -38,9 +38,9 @@ The automatic recovery trap is best-effort: it cannot protect against EC2 power 
 ## Not yet complete
 
 - Jenkins short-lived AWS authentication provisioning and permission validation
-- Automated build/push of new immutable image tags to ECR
+- Administrator-approved activation and live verification of the implemented ECR publisher
 - Live EC2 end-to-end promotion/rollback verification
-- Monitoring, notifications, and full DevSecOps security gates
+- Activation/live verification of optional monitoring and notifications
 
 ## Jenkins rollback pipeline
 
@@ -59,9 +59,9 @@ Setting `ROLLBACK_TO_PREVIOUS=true` explicitly authorizes a real
 rollback through AWS Systems Manager. This must only be done after
 reviewing the current EC2 state and backup container.
 
-## Verified local rollback tests
+## Historical verified local rollback tests
 
-The following tests were completed using isolated Docker containers:
+The following historical tests were reported before this audit using isolated Docker containers. See [current verification](docs/VERIFICATION.md) for fresh results:
 
 | Test | Result |
 |---|---|
@@ -107,7 +107,8 @@ From `terraform/`, the safe checks are:
 ```bash
 terraform fmt -check
 terraform validate
-terraform plan -input=false
+# Only after explicit-profile STS identity verification:
+AWS_PROFILE=cloudlaunch terraform plan -input=false
 ```
 
 The plan only reads data sources when credentials and AWS connectivity are
@@ -168,3 +169,15 @@ The pipeline rejects images when the configured Trivy scan detects HIGH or CRITI
 - `5c119a7` — Enforce Trivy vulnerability gate in CI
 
 [View successful GitHub Actions workflow](https://github.com/VNavodi/cloudlaunch-devops/actions)
+
+## Current safety and operational notes
+
+See [audit](docs/AUDIT.md), [verification](docs/VERIFICATION.md), [infrastructure](docs/INFRASTRUCTURE.md), [publishing](docs/PUBLISHING.md) and [monitoring](docs/MONITORING.md).
+
+Deploy, rollback and SSM health-check wrappers default to no AWS commands. Real commands require an explicit approved AWS_PROFILE, reject the personal account/root identity and check account before ECR/SSM. Jenkins uses a separately provisioned short-lived cloudlaunch profile; no profile was created or overwritten in this audit. Never inject root keys. The [Jenkins policy template](docs/iam/jenkins-policy.json) scopes SendCommand to the existing instance/document; this still grants powerful remote shell access and requires protected jobs, trusted SCM and authorized operators.
+
+SSM explicitly starts Bash from a base64 payload; a shebang embedded in a shell command is not sufficient. Commands use a 600-second execution timeout and bounded health HTTP requests. Local polling failure does not cancel a remote operation: record the command ID, inspect SSM status with the correct account before retrying. Promotion and rollback share the same host lock, including direct promotion invocation. Catchable signals attempt recovery; SIGKILL/power loss do not.
+
+Production is loopback-only on port 3000. Public access requires a separately reviewed TLS/reverse-proxy or load-balancer architecture, never an automatic 0.0.0.0/0 security-group rule. Candidate is loopback port 3001. Promotion stops production before replacement, so a maintenance window and temporary downtime are expected. Backups deliberately block later deployments; review and separately authorize cleanup rather than deleting evidence automatically. Manual rollback retains the replaced container; automatic promotion recovery retains a failed replacement under a unique diagnostic name before restoring the backup.
+
+The Jenkins image includes Python 3, AWS CLI and util-linux. Its upstream Jenkins tag and AWS CLI download remain floating and installer signature verification is not implemented; pin and validate an approved release/signature before treating that image as a production-hardened agent. No live Jenkins job was run in this audit.

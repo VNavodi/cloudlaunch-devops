@@ -17,13 +17,14 @@ pipeline {
 
     environment {
         AWS_DEFAULT_REGION = 'ap-southeast-2'
+        AWS_PROFILE = 'cloudlaunch'
         AWS_CONFIG_FILE = '/var/jenkins_home/.aws/config'
     }
 
     stages {
         stage('Validate rollback scripts') {
             steps {
-                sh 'bash -n scripts/rollback.sh scripts/rollback-container.sh'
+                sh 'for file in scripts/*.sh; do bash -n "$file" || exit; done'
             }
         }
 
@@ -32,7 +33,7 @@ pipeline {
                 expression { return params.ROLLBACK_TO_PREVIOUS }
             }
             steps {
-                sh 'aws sts get-caller-identity --query Account --output text | grep -Fx 636621822646'
+                sh 'bash -c "source scripts/aws-identity.sh; cloudlaunch_identity"'
             }
         }
 

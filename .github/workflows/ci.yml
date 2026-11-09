@@ -10,17 +10,24 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test-and-build:
     name: Test and Build Docker Image
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
           cache: npm
@@ -35,10 +42,13 @@ jobs:
         run: npm test
 
       - name: Build Docker image
-        run: docker build -t cloudlaunch:ci ./app
+        run: docker build --label org.opencontainers.image.revision="$GITHUB_SHA" -t cloudlaunch:ci ./app
+
+      - name: Verify non-root startup, health and graceful shutdown
+        run: bash tests/docker-smoke.sh cloudlaunch:ci
 
       - name: Scan Docker image with Trivy
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           image-ref: 'cloudlaunch:ci'
           format: 'table'
@@ -46,20 +56,46 @@ jobs:
           vuln-type: 'os,library'
           exit-code: '1'
 
+      - name: Save scanned image (trusted main pushes only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p image-artifact
+          docker save cloudlaunch:ci -o image-artifact/image.tar
+          docker image inspect cloudlaunch:ci --format '{{.Id}}' > image-artifact/image-id.txt
+          printf '%s\n' "$GITHUB_SHA" > image-artifact/commit.txt
+          cd image-artifact
+          sha256sum image.tar > image.tar.sha256
+
+      - name: Upload scanned image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: scanned-image-${{ github.sha }}
+          path: image-artifact/
+          retention-days: 3
+          compression-level: 0
+          if-no-files-found: error
+
   terraform-validate:
     name: Validate Terraform Infrastructure
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
+    strategy:
+      matrix:
+        root: [terraform, terraform-ecr]
     defaults:
       run:
-        working-directory: ./terraform
+        working-directory: ./${{ matrix.root }}
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: '1.16.5'
 
@@ -67,37 +103,25 @@ jobs:
         run: terraform fmt -check -recursive
 
       - name: Initialize Terraform
-        run: terraform init -backend=false -input=false
+        run: terraform init -backend=false -input=false -lockfile=readonly
 
       - name: Validate Terraform configuration
         run: terraform validate -no-color
 
+      - name: Test monitoring with mock AWS provider
+        if: matrix.root == 'terraform'
+        run: terraform test -no-color
+
   deployment-safety-tests:
     name: Deployment Safety and Recovery Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
-      - name: Validate Bash script syntax
-        run: |
-          bash -n scripts/promote-container.sh
-          bash -n scripts/rollback-container.sh
-          bash -n scripts/deploy.sh
-          bash -n tests/*.sh
-
-      - name: Run deployment safety tests
-        run: |
-          env -u PROMOTION_ENABLED -u ROLLBACK_ENABLED \
-            bash tests/test-promotion.sh
-
-      - name: Run successful promotion mock test
-        run: |
-          env -u PROMOTION_ENABLED -u ROLLBACK_ENABLED \
-            bash tests/test-promotion-mock.sh
-
-      - name: Run failed promotion recovery mock test
-        run: |
-          env -u PROMOTION_ENABLED -u ROLLBACK_ENABLED \
-            bash tests/test-promotion-failure.sh
+      - name: Run syntax, safety and recovery tests
+        run: bash scripts/validate-local.sh

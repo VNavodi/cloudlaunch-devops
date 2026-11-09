@@ -1,0 +1,8 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {"Effect": "Allow", "Action": "ecr:DescribeImages", "Resource": "arn:aws:ecr:ap-southeast-2:636621822646:repository/cloudlaunch"},
+    {"Effect": "Allow", "Action": "ssm:SendCommand", "Resource": ["arn:aws:ec2:ap-southeast-2:636621822646:instance/i-0b469c30aee75c370", "arn:aws:ssm:ap-southeast-2::document/AWS-RunShellScript"]},
+    {"Effect": "Allow", "Action": "ssm:GetCommandInvocation", "Resource": "*"}
+  ]
+}

@@ -15,3 +15,8 @@ crash.log
 
 # Local deployment backups
 scripts/*.backup
+*.tfplan
+*.pem
+*.key
+.aws/
+*.tar

@@ -11,18 +11,19 @@ pipeline {
     }
     environment {
         AWS_DEFAULT_REGION = 'ap-southeast-2'
+        AWS_PROFILE = 'cloudlaunch'
         AWS_CONFIG_FILE = '/var/jenkins_home/.aws/config'
     }
     stages {
         stage('Validate source') {
             steps {
-                sh 'bash -n scripts/deploy.sh scripts/promote-container.sh scripts/rollback-container.sh'
+                sh 'for file in scripts/*.sh; do bash -n "$file" || exit; done'
             }
         }
         stage('AWS identity') {
             when { expression { return params.DEPLOY_TO_EC2 } }
             steps {
-                sh 'aws sts get-caller-identity --query Account --output text | grep -Fx 636621822646'
+                sh 'bash -c "source scripts/aws-identity.sh; cloudlaunch_identity"'
             }
         }
         stage('Deploy via SSM') {

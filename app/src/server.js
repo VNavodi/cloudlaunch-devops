@@ -21,9 +21,16 @@ app.get("/health", (req, res) => {
 });
 
 if (require.main === module) {
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`CloudLaunch running on port ${PORT}`);
   });
+  for (const signal of ["SIGTERM", "SIGINT"]) {
+    process.once(signal, () => {
+      console.log(`CloudLaunch shutting down: ${signal}`);
+      server.close(() => process.exit(0));
+      setTimeout(() => process.exit(1), 8000).unref();
+    });
+  }
 }
 
 module.exports = app;

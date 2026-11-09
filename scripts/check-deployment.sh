@@ -4,6 +4,15 @@ set -euo pipefail
 REGION="ap-southeast-2"
 INSTANCE_ID="i-0b469c30aee75c370"
 
+if [[ "${CHECK_ENABLED:-false}" != true ]]; then
+  echo 'DRY RUN: Set CHECK_ENABLED=true only with approval to execute an SSM health check.'
+  exit 0
+fi
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source "$SCRIPT_DIR/aws-identity.sh"
+cloudlaunch_identity
+aws() { command aws --profile "$AWS_PROFILE" "$@"; }
+
 echo "Checking CloudLaunch EC2 deployment..."
 
 COMMAND_ID=$(aws ssm send-command \

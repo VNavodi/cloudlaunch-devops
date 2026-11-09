@@ -1,0 +1,8 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": ["logs:CreateLogStream", "logs:PutLogEvents", "logs:DescribeLogStreams"],
+    "Resource": "arn:aws:logs:ap-southeast-2:636621822646:log-group:/cloudlaunch/application:*"
+  }]
+}

@@ -144,6 +144,9 @@ recover() {
 }
 
 trap recover EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 echo 'Stopping current production for rollback...'
 RECOVERY_ACTIVE=true

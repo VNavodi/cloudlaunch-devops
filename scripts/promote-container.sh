@@ -12,6 +12,11 @@ if [[ "${PROMOTION_ENABLED:-false}" != true ]]; then
   exit 0
 fi
 
+# Reuse an inherited deployment lock, or acquire it for direct operator invocation.
+LOCK_FILE="${LOCK_FILE:-/var/lock/cloudlaunch-deploy.lock}"
+if [[ ! /proc/$/fd/9 -ef "$LOCK_FILE" ]]; then exec 9>"$LOCK_FILE"; fi
+flock -n 9 || { echo 'ERROR: Another CloudLaunch operation is in progress.' >&2; exit 1; }
+
 # Run on the EC2 host only. Never start a second deployment while a backup exists.
 [[ "$(docker inspect cloudlaunch-app --format '{{.State.Status}}')" == running ]] || { echo 'ERROR: Production not running' >&2; exit 1; }
 [[ "$(docker inspect cloudlaunch-app --format '{{.HostConfig.RestartPolicy.Name}}')" == unless-stopped ]] || { echo 'ERROR: Unexpected restart policy' >&2; exit 1; }
@@ -25,7 +30,7 @@ if docker container inspect cloudlaunch-candidate >/dev/null 2>&1; then
   echo 'ERROR: Candidate container still exists' >&2
   exit 1
 fi
-curl -fsS http://127.0.0.1:3000/health >/dev/null
+curl --connect-timeout 2 --max-time 3 -fsS http://127.0.0.1:3000/health >/dev/null
 if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
   echo 'ERROR: Target image must be pulled on EC2 before promotion' >&2
   exit 1
@@ -41,7 +46,12 @@ recover() {
     echo 'Promotion interrupted/failed; attempting rollback...' >&2
     if docker container inspect cloudlaunch-app-previous >/dev/null 2>&1; then
       if docker container inspect cloudlaunch-app >/dev/null 2>&1; then
-        docker rm -f cloudlaunch-app || echo 'CRITICAL: Cannot remove failed container' >&2
+        # Preserve failed release for investigation instead of deleting it.
+        local failed_name="cloudlaunch-app-failed-$(date +%s)-$$"
+        docker update --restart=no cloudlaunch-app &&
+          docker stop cloudlaunch-app &&
+          docker rename cloudlaunch-app "$failed_name" ||
+          echo 'CRITICAL: Cannot preserve failed container; backup retained.' >&2
       fi
       if ! docker container inspect cloudlaunch-app >/dev/null 2>&1; then
         if docker rename cloudlaunch-app-previous cloudlaunch-app && \
@@ -49,7 +59,7 @@ recover() {
            docker start cloudlaunch-app; then
           local healthy=0
           for _ in $(seq 1 15); do
-            if curl -fsS http://127.0.0.1:3000/health >/dev/null 2>&1; then healthy=1; break; fi
+            if curl --connect-timeout 2 --max-time 3 -fsS http://127.0.0.1:3000/health >/dev/null 2>&1; then healthy=1; break; fi
             sleep 2
           done
           if (( healthy )); then echo 'Rollback restored healthy production.' >&2
@@ -90,7 +100,7 @@ docker run -d --name cloudlaunch-app --memory=128m \
   --restart=unless-stopped -p 127.0.0.1:3000:3000 "$IMAGE"
 
 for _ in $(seq 1 15); do
-  if curl -fsS http://127.0.0.1:3000/health >/dev/null 2>&1; then
+  if curl --connect-timeout 2 --max-time 3 -fsS http://127.0.0.1:3000/health >/dev/null 2>&1; then
     RECOVERY_REQUIRED=0
     echo 'Promotion successful. Backup retained as cloudlaunch-app-previous.'
     exit 0

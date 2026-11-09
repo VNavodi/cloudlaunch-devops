@@ -1,0 +1,15 @@
+{
+  "agent": {"run_as_user": "root"},
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [{
+          "file_path": "/var/log/cloudlaunch/health.jsonl",
+          "log_group_name": "/cloudlaunch/application",
+          "log_stream_name": "{instance_id}/health",
+          "timezone": "UTC"
+        }]
+      }
+    }
+  }
+}
