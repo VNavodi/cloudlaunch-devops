@@ -31,6 +31,16 @@ Open `http://localhost:5173` to use the dashboard. Vite proxies `/api` requests 
 the Express server at `http://localhost:3000`. The API also exposes `GET /health`,
 `GET /api/services`, and `POST /api/services`.
 
+### Run with Docker Compose
+
+```bash
+cd app
+docker compose up --build
+```
+
+Open `http://localhost:5173`. Compose builds the frontend and backend images,
+connects them on a private network, and exposes only the frontend to the host.
+
 ## CI pipeline
 
 GitHub Actions validates the application, builds a production Docker image, runs Trivy container scanning, validates Terraform infrastructure, and runs deployment safety/recovery tests.
