@@ -18,7 +18,7 @@ ENV NODE_ENV=production
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 
 COPY --chown=node:node package*.json ./
-COPY --chown=node:node src/ ./src/
+COPY --chown=node:node backend/ ./backend/
 
 # npm is not needed to run our Node.js application
 RUN rm -rf /usr/local/lib/node_modules/npm \
@@ -29,4 +29,4 @@ USER node
 
 EXPOSE 3000
 
-CMD ["node", "src/server.js"]
+CMD ["node", "backend/src/server.js"]

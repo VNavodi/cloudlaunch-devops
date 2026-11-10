@@ -4,12 +4,32 @@ CloudLaunch is a hands-on DevOps project demonstrating a containerized Node.js a
 
 ## Technology stack
 
-- **Application:** Node.js, Express
+- **Application:** React, Vite, Node.js, Express
 - **Containerization:** Docker (multi-stage production build)
 - **Continuous integration:** GitHub Actions
 - **Continuous delivery:** Jenkins (manually authorized workflows)
 - **Infrastructure:** AWS EC2, ECR, Systems Manager (SSM), Terraform
 - **Security:** Trivy vulnerability scanning
+
+## Run the full-stack application locally
+
+The backend lives in `app/backend/` and the React dashboard lives in `app/frontend/`.
+
+```bash
+# Terminal 1 — API
+cd app
+npm install
+npm start
+
+# Terminal 2 — React dashboard
+cd app/frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173` to use the dashboard. Vite proxies `/api` requests to
+the Express server at `http://localhost:3000`. The API also exposes `GET /health`,
+`GET /api/services`, and `POST /api/services`.
 
 ## CI pipeline
 
