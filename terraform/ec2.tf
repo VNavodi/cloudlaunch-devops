@@ -14,22 +14,10 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-data "aws_subnets" "default" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
-  }
-
-  filter {
-    name   = "default-for-az"
-    values = ["true"]
-  }
-}
-
 resource "aws_instance" "cloudlaunch" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
-  subnet_id              = sort(data.aws_subnets.default.ids)[0]
+  subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.cloudlaunch.id]
   iam_instance_profile   = aws_iam_instance_profile.cloudlaunch_ec2.name
   user_data              = file("${path.module}/user-data.sh")
