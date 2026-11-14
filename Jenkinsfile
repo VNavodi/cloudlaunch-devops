@@ -12,6 +12,7 @@ pipeline {
     environment {
         AWS_DEFAULT_REGION = 'ap-southeast-2'
         AWS_CONFIG_FILE = '/var/jenkins_home/.aws/config'
+        PATH+AWS = '/usr/local/bin'
     }
     stages {
         stage('Validate source') {

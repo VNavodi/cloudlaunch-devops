@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REGION="ap-southeast-2"
-INSTANCE_ID="i-0b469c30aee75c370"
+INSTANCE_ID="i-048eacafbcbab68c7"
 
 echo "Checking CloudLaunch EC2 deployment..."
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 REGION=ap-southeast-2
-INSTANCE_ID=i-0b469c30aee75c370
+INSTANCE_ID=i-048eacafbcbab68c7
 ACCOUNT=636621822646
 REGISTRY="$ACCOUNT.dkr.ecr.$REGION.amazonaws.com"
 TAG="${1:?Usage: scripts/deploy.sh IMAGE_TAG}"
