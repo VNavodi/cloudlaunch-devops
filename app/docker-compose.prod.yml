@@ -1,0 +1,30 @@
+services:
+  backend:
+    image: 636621822646.dkr.ecr.ap-southeast-2.amazonaws.com/cloudlaunch-backend:${IMAGE_TAG:-v1}
+    container_name: cloudlaunch-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  frontend:
+    image: 636621822646.dkr.ecr.ap-southeast-2.amazonaws.com/cloudlaunch-frontend:${IMAGE_TAG:-v1}
+    container_name: cloudlaunch-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
