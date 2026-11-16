@@ -24,27 +24,31 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: app/package-lock.json
+          cache-dependency-path: |
+            app/package-lock.json
+            app/frontend/package-lock.json
 
-      - name: Install dependencies
+      - name: Install backend dependencies
         working-directory: ./app
         run: npm ci
 
-      - name: Run automated tests
+      - name: Run backend tests
         working-directory: ./app
         run: npm test
 
-      - name: Build Docker image
-        run: docker build -t cloudlaunch:ci ./app
+      - name: Install frontend dependencies
+        working-directory: ./app/frontend
+        run: npm ci
 
-      # - name: Scan Docker image with Trivy
-      #   uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: 'cloudlaunch:ci'
-          format: 'table'
-          severity: 'HIGH,CRITICAL'
-          vuln-type: 'os,library'
-          exit-code: '1'
+      - name: Build frontend
+        working-directory: ./app/frontend
+        run: npm run build
+
+      - name: Build backend Docker image
+        run: docker build -t cloudlaunch-backend:ci -f app/backend/Dockerfile app
+
+      - name: Build frontend Docker image
+        run: docker build -t cloudlaunch-frontend:ci ./app/frontend
 
   terraform-validate:
     name: Validate Terraform Infrastructure
